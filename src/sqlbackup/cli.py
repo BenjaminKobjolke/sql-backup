@@ -24,6 +24,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--config", required=True, help="Config name (without .json)")
     parser.add_argument("--path", required=True, help="Path to .sql file")
+    parser.add_argument(
+        "--incremental",
+        type=int,
+        default=None,
+        help="Keep N most recent timestamped backups (only with --backup)",
+    )
 
     return parser
 
@@ -38,8 +44,10 @@ def main() -> None:
         sql_path = Path(args.path)
 
         if args.backup:
-            backup_database(config, sql_path)
-            print(f"Backup complete: {sql_path}")
+            actual_path = backup_database(
+                config, sql_path, incremental=args.incremental
+            )
+            print(f"Backup complete: {actual_path}")
         elif args.push:
             push_database(config, sql_path)
             print(f"Push complete: {sql_path}")

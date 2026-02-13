@@ -52,6 +52,16 @@ sqlbackup --backup --config my_database --path backups/20260213_my_database.sql
 sqlbackup --push --config my_database_local --path backups/20260213_my_database.sql
 ```
 
+### Incremental backup
+
+Use `--incremental N` to automatically prepend a timestamp to the filename and keep only the N most recent backups:
+
+```bash
+sqlbackup --backup --config my_database --path backups/my_database.sql --incremental 10
+```
+
+This produces files like `backups/20260213_143022_my_database.sql`. Once there are more than 10 matching backups, the oldest are deleted.
+
 The `--config` value is the filename without `.json`. The `--path` value is the path to the `.sql` file.
 
 ## Development

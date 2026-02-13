@@ -14,6 +14,7 @@ from sqlbackup.constants import (
     SQL_DROP_TABLE,
     SQL_FOOTER,
     SQL_HEADER,
+    TIMESTAMP_FORMAT,
 )
 from sqlbackup.exceptions import BackupError
 
@@ -57,24 +58,53 @@ def _write_table_data(
         f.write(";\n\n")
 
 
+def resolve_incremental_path(base_path: Path) -> Path:
+    """Return a timestamped version of the given path.
+
+    Example: ``backups/db.sql`` becomes ``backups/20260213_143022_db.sql``.
+    """
+    timestamp = datetime.now(UTC).strftime(TIMESTAMP_FORMAT)
+    return base_path.parent / f"{timestamp}_{base_path.name}"
+
+
+def cleanup_old_backups(base_path: Path, keep: int) -> None:
+    """Delete old incremental backups, keeping only the *keep* most recent.
+
+    Matches files named ``*_{base_path.name}`` in the parent directory.
+    """
+    pattern = f"*_{base_path.name}"
+    matches = sorted(base_path.parent.glob(pattern))
+    for old in matches[:-keep]:
+        old.unlink()
+
+
 def backup_database(
     config: DbConfig,
     output_path: Path,
     batch_size: int = DEFAULT_BATCH_SIZE,
-) -> None:
+    incremental: int | None = None,
+) -> Path:
     """Dump a database to a .sql file.
 
     Args:
         config: Database connection configuration.
         output_path: Path for the output SQL file.
         batch_size: Number of rows per INSERT batch.
+        incremental: If set, prepend a timestamp and keep only N backups.
+
+    Returns:
+        The actual path the backup was written to.
     """
-    if output_path.exists():
-        raise BackupError(ERR_BACKUP_PATH_EXISTS.format(path=output_path))
+    if incremental is not None:
+        actual_path = resolve_incremental_path(output_path)
+    else:
+        actual_path = output_path
+        if actual_path.exists():
+            raise BackupError(ERR_BACKUP_PATH_EXISTS.format(path=actual_path))
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    actual_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with DatabaseConnection(config) as db, open(output_path, "w", encoding="utf-8") as f:
+    with DatabaseConnection(config) as db, open(actual_path, "w", encoding="utf-8") as f:
         now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
         f.write(SQL_HEADER.format(database=config.database, date=now))
 
@@ -89,3 +119,8 @@ def backup_database(
             _write_table_data(f, db, table, batch_size=batch_size)
 
         f.write(SQL_FOOTER)
+
+    if incremental is not None:
+        cleanup_old_backups(output_path, keep=incremental)
+
+    return actual_path

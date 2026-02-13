@@ -17,7 +17,7 @@ class TestCLI:
 
         with (
             patch("sqlbackup.cli.load_config", return_value=config) as mock_load,
-            patch("sqlbackup.cli.backup_database") as mock_backup,
+            patch("sqlbackup.cli.backup_database", return_value=output) as mock_backup,
             patch(
                 "sys.argv",
                 ["sqlbackup", "--backup", "--config", "mydb", "--path", str(output)],
@@ -26,7 +26,7 @@ class TestCLI:
             main()
 
         mock_load.assert_called_once_with("mydb")
-        mock_backup.assert_called_once_with(config, output)
+        mock_backup.assert_called_once_with(config, output, incremental=None)
 
     def test_push_dispatches(self, tmp_path: Path) -> None:
         config = MagicMock()
@@ -136,3 +136,28 @@ class TestCLI:
             main()
 
         assert exc_info.value.code == 1
+
+    def test_incremental_passes_to_backup(self, tmp_path: Path) -> None:
+        config = MagicMock()
+        output = tmp_path / "dump.sql"
+
+        with (
+            patch("sqlbackup.cli.load_config", return_value=config),
+            patch("sqlbackup.cli.backup_database", return_value=output) as mock_backup,
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--backup",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    str(output),
+                    "--incremental",
+                    "5",
+                ],
+            ),
+        ):
+            main()
+
+        mock_backup.assert_called_once_with(config, output, incremental=5)
