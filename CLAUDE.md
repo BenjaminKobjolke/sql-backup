@@ -20,6 +20,16 @@
 - Batched INSERTs (1000 rows default) for memory efficiency
 - Server-side cursors for large table iteration
 
+## Code Analysis
+
+After implementing new features or making significant changes, run the code analysis:
+
+```bash
+powershell -Command "cd 'D:\GIT\BenjaminKobjolke\sql-backup'; cmd /c '.\tools\analyze_code.bat'"
+```
+
+Fix any reported issues before committing.
+
 ## Project Structure
 - `src/sqlbackup/` — main package
 - `tests/` — pytest test suite
