@@ -47,6 +47,9 @@ class TestPushDatabase:
             push_database(db_config, sql_file)
 
         calls = mock_db_conn.execute_sql.call_args_list
+        assert call("SET GLOBAL max_allowed_packet = 67108864") in calls
+        assert call("SET SESSION net_read_timeout = 600") in calls
+        assert call("SET SESSION net_write_timeout = 600") in calls
         assert call("SET FOREIGN_KEY_CHECKS = 0") in calls
         assert call("DROP TABLE IF EXISTS `users`") in calls
         assert call("CREATE TABLE `users` (id INT)") in calls
@@ -65,8 +68,8 @@ class TestPushDatabase:
             push_database(db_config, sql_file)
 
         calls = mock_db_conn.execute_sql.call_args_list
-        assert len(calls) == 1
-        assert calls[0] == call("DROP TABLE IF EXISTS `users`")
+        assert len(calls) == 4
+        assert calls[3] == call("DROP TABLE IF EXISTS `users`")
 
     def test_handles_multiline_statements(
         self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
@@ -81,10 +84,10 @@ class TestPushDatabase:
             push_database(db_config, sql_file)
 
         calls = mock_db_conn.execute_sql.call_args_list
-        assert len(calls) == 1
-        assert "INSERT INTO `users`" in calls[0][0][0]
-        assert "(1, 'alice')" in calls[0][0][0]
-        assert "(2, 'bob')" in calls[0][0][0]
+        assert len(calls) == 4
+        assert "INSERT INTO `users`" in calls[3][0][0]
+        assert "(1, 'alice')" in calls[3][0][0]
+        assert "(2, 'bob')" in calls[3][0][0]
 
     def test_handles_create_table_multiline(
         self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
@@ -103,6 +106,31 @@ class TestPushDatabase:
             push_database(db_config, sql_file)
 
         calls = mock_db_conn.execute_sql.call_args_list
-        assert len(calls) == 1
-        assert "CREATE TABLE `users`" in calls[0][0][0]
-        assert "ENGINE=InnoDB" in calls[0][0][0]
+        assert len(calls) == 4
+        assert "CREATE TABLE `users`" in calls[3][0][0]
+        assert "ENGINE=InnoDB" in calls[3][0][0]
+
+    def test_handles_semicolons_in_string_values(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        """Semicolons inside string literals must not split the statement."""
+        sql_file = tmp_path / "dump.sql"
+        sql_file.write_text(
+            "INSERT INTO `wp_options` (`option_name`, `option_value`) VALUES\n"
+            "('wptouch_settings', 's:10:\"site_title\";\n"
+            "s:29:\"XIDA Design & Tech\";\n"
+            "s:5:\"color\";\n"
+            "s:7:\"#ffffff\";');\n",
+            encoding="utf-8",
+        )
+
+        with patch("sqlbackup.push.DatabaseConnection", return_value=mock_db_conn):
+            push_database(db_config, sql_file)
+
+        calls = mock_db_conn.execute_sql.call_args_list
+        # 1 SET GLOBAL + 2 session SETs + 1 INSERT = 4
+        assert len(calls) == 4
+        stmt = calls[3][0][0]
+        assert "INSERT INTO `wp_options`" in stmt
+        assert "s:10:\"site_title\";" in stmt
+        assert "s:7:\"#ffffff\";" in stmt
