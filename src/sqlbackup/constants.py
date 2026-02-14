@@ -14,12 +14,15 @@ SQL_HEADER = """\
 -- Database: {database}
 -- Date: {date}
 
+SET @OLD_SQL_MODE=@@SQL_MODE;
+SET sql_mode = '';
 SET FOREIGN_KEY_CHECKS = 0;
 
 """
 
 SQL_FOOTER = """
 SET FOREIGN_KEY_CHECKS = 1;
+SET sql_mode = @OLD_SQL_MODE;
 """
 
 SQL_DROP_TABLE = "DROP TABLE IF EXISTS `{table}`;\n"
