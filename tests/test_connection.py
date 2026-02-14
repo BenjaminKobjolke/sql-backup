@@ -34,6 +34,9 @@ class TestDatabaseConnection:
                 password="secret",
                 database="testdb",
                 charset="utf8mb4",
+                read_timeout=600,
+                write_timeout=600,
+                max_allowed_packet=64 * 1024 * 1024,
             )
 
     def test_closes_on_exit(self, db_config: DbConfig, mock_pymysql: MagicMock) -> None:

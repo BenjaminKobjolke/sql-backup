@@ -28,6 +28,9 @@ class DatabaseConnection:
                 password=self._config.password,
                 database=self._config.database,
                 charset="utf8mb4",
+                read_timeout=600,
+                write_timeout=600,
+                max_allowed_packet=64 * 1024 * 1024,
             )
         except Exception as exc:
             raise ConnectionError(ERR_CONNECTION_FAILED.format(error=exc)) from exc
