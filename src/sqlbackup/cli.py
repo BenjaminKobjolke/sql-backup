@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbackup.backup import backup_database
 from sqlbackup.config import load_config
+from sqlbackup.constants import ERR_ZIP_REQUIRES_BACKUP
 from sqlbackup.exceptions import SqlBackupError
 from sqlbackup.push import push_database
 
@@ -30,6 +31,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Keep N most recent timestamped backups (only with --backup)",
     )
+    parser.add_argument(
+        "--zip",
+        action="store_true",
+        help="Compress backup as .zip (only with --backup; --push auto-detects .zip)",
+    )
 
     return parser
 
@@ -39,13 +45,16 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
+    if args.zip and not args.backup:
+        parser.error(ERR_ZIP_REQUIRES_BACKUP)
+
     try:
         config = load_config(args.config)
         sql_path = Path(args.path)
 
         if args.backup:
             actual_path = backup_database(
-                config, sql_path, incremental=args.incremental
+                config, sql_path, incremental=args.incremental, zip=args.zip
             )
             print(f"Backup complete: {actual_path}")
         elif args.push:

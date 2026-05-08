@@ -2,6 +2,8 @@
 
 CONFIG_DIR = "configs"
 CONFIG_EXT = ".json"
+ZIP_EXT = ".zip"
+SQL_EXT = ".sql"
 
 REQUIRED_CONFIG_KEYS = frozenset({"host", "port", "user", "password", "database"})
 
@@ -36,3 +38,6 @@ ERR_PUSH_FILE_NOT_FOUND = "SQL file not found: {path}"
 ERR_CONNECTION_FAILED = "Failed to connect to database: {error}"
 ERR_MUTUALLY_EXCLUSIVE = "Must specify either --backup or --push, not both."
 ERR_NO_ACTION = "Must specify --backup or --push."
+ERR_ZIP_REQUIRES_BACKUP = "--zip can only be used with --backup."
+ERR_PUSH_ZIP_NO_SQL = "No .sql file found inside zip: {path}"
+ERR_PUSH_ZIP_MULTIPLE_SQL = "Multiple .sql files inside zip (ambiguous): {path}"

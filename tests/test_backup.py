@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -283,3 +284,105 @@ class TestIncrementalBackup:
             backup_database(db_config, base, incremental=3)
         remaining = list(tmp_path.glob("*_db.sql"))
         assert len(remaining) == 3
+
+
+class TestZipBackup:
+    @pytest.fixture()
+    def db_config(self) -> DbConfig:
+        return DbConfig(
+            host="localhost", port=3306, user="root", password="secret", database="testdb"
+        )
+
+    @pytest.fixture()
+    def mock_db_conn(self) -> MagicMock:
+        mock = MagicMock()
+        mock.__enter__ = MagicMock(return_value=mock)
+        mock.__exit__ = MagicMock(return_value=False)
+        mock.get_tables.return_value = []
+        return mock
+
+    def test_creates_zip_and_removes_sql(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        sql_path = tmp_path / "db.sql"
+        with patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn):
+            actual = backup_database(db_config, sql_path, zip=True)
+        assert actual == tmp_path / "db.zip"
+        assert actual.exists()
+        assert not sql_path.exists()
+
+    def test_zip_contains_sql_member(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        sql_path = tmp_path / "db.sql"
+        with patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn):
+            actual = backup_database(db_config, sql_path, zip=True)
+        with zipfile.ZipFile(actual) as zf:
+            assert zf.namelist() == ["db.sql"]
+            content = zf.read("db.sql").decode("utf-8")
+            assert "SET FOREIGN_KEY_CHECKS = 0;" in content
+
+    def test_raises_if_zip_exists(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        sql_path = tmp_path / "db.sql"
+        (tmp_path / "db.zip").write_text("existing")
+
+        with (
+            pytest.raises(BackupError, match="already exists"),
+            patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn),
+        ):
+            backup_database(db_config, sql_path, zip=True)
+        # Original .sql must not have been written either
+        assert not sql_path.exists()
+
+    def test_zip_with_incremental(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        base = tmp_path / "db.sql"
+        with patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn):
+            actual = backup_database(db_config, base, incremental=5, zip=True)
+        assert re.match(r"^\d{8}_\d{6}_db\.zip$", actual.name)
+        assert actual.exists()
+        assert not base.exists()
+        # No leftover unzipped intermediate
+        leftovers = list(tmp_path.glob("*_db.sql"))
+        assert leftovers == []
+
+    def test_zip_incremental_cleanup_only_zips(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        # Pre-existing .zip files; cleanup should rotate by .zip pattern
+        for i in range(5):
+            (tmp_path / f"2026010{i}_120000_db.zip").write_text("")
+        # Pre-existing unrelated .sql should not be deleted
+        (tmp_path / "20260101_120000_db.sql").write_text("")
+
+        base = tmp_path / "db.sql"
+        with patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn):
+            backup_database(db_config, base, incremental=3, zip=True)
+
+        zips = sorted(tmp_path.glob("*_db.zip"))
+        assert len(zips) == 3
+        # Untouched .sql remains
+        assert (tmp_path / "20260101_120000_db.sql").exists()
+
+
+class TestCleanupOldBackupsZipped:
+    def test_keeps_n_most_recent_zip(self, tmp_path: Path) -> None:
+        for i in range(5):
+            (tmp_path / f"2026010{i}_120000_db.zip").write_text("")
+        cleanup_old_backups(tmp_path / "db.sql", keep=2, zipped=True)
+        remaining = sorted(tmp_path.glob("*_db.zip"))
+        assert len(remaining) == 2
+        assert remaining[0].name == "20260103_120000_db.zip"
+
+    def test_zipped_does_not_touch_sql_files(self, tmp_path: Path) -> None:
+        for i in range(3):
+            (tmp_path / f"2026010{i}_120000_db.zip").write_text("")
+        (tmp_path / "20260101_120000_db.sql").write_text("")
+        cleanup_old_backups(tmp_path / "db.sql", keep=1, zipped=True)
+        assert (tmp_path / "20260101_120000_db.sql").exists()
+        zips = sorted(tmp_path.glob("*_db.zip"))
+        assert len(zips) == 1
+        assert zips[0].name == "20260102_120000_db.zip"

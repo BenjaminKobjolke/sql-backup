@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -134,3 +135,54 @@ class TestPushDatabase:
         assert "INSERT INTO `wp_options`" in stmt
         assert "s:10:\"site_title\";" in stmt
         assert "s:7:\"#ffffff\";" in stmt
+
+
+class TestPushZip:
+    def test_extracts_and_pushes_from_zip(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        sql_content = "DROP TABLE IF EXISTS `users`;\nCREATE TABLE `users` (id INT);\n"
+        zip_path = tmp_path / "dump.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("dump.sql", sql_content)
+
+        with patch("sqlbackup.push.DatabaseConnection", return_value=mock_db_conn):
+            push_database(db_config, zip_path)
+
+        calls = mock_db_conn.execute_sql.call_args_list
+        assert call("DROP TABLE IF EXISTS `users`") in calls
+        assert call("CREATE TABLE `users` (id INT)") in calls
+
+    def test_zip_with_no_sql_raises(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        zip_path = tmp_path / "empty.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("readme.txt", "no sql here")
+
+        with (
+            pytest.raises(PushError, match="No .sql file"),
+            patch("sqlbackup.push.DatabaseConnection", return_value=mock_db_conn),
+        ):
+            push_database(db_config, zip_path)
+
+    def test_zip_with_multiple_sql_raises(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        zip_path = tmp_path / "multi.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("a.sql", "DROP TABLE x;")
+            zf.writestr("b.sql", "DROP TABLE y;")
+
+        with (
+            pytest.raises(PushError, match="Multiple .sql files"),
+            patch("sqlbackup.push.DatabaseConnection", return_value=mock_db_conn),
+        ):
+            push_database(db_config, zip_path)
+
+    def test_missing_zip_raises_file_not_found(
+        self, db_config: DbConfig, tmp_path: Path
+    ) -> None:
+        missing = tmp_path / "nope.zip"
+        with pytest.raises(PushError, match="SQL file not found"):
+            push_database(db_config, missing)

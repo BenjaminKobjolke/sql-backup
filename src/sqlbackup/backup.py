@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
@@ -15,6 +16,7 @@ from sqlbackup.constants import (
     SQL_FOOTER,
     SQL_HEADER,
     TIMESTAMP_FORMAT,
+    ZIP_EXT,
 )
 from sqlbackup.exceptions import BackupError
 
@@ -67,15 +69,28 @@ def resolve_incremental_path(base_path: Path) -> Path:
     return base_path.parent / f"{timestamp}_{base_path.name}"
 
 
-def cleanup_old_backups(base_path: Path, keep: int) -> None:
+def cleanup_old_backups(base_path: Path, keep: int, zipped: bool = False) -> None:
     """Delete old incremental backups, keeping only the *keep* most recent.
 
-    Matches files named ``*_{base_path.name}`` in the parent directory.
+    Matches files named ``*_{base_path.name}`` (or ``*_{stem}.zip`` when ``zipped``)
+    in the parent directory.
     """
-    pattern = f"*_{base_path.name}"
+    pattern = f"*_{base_path.stem}{ZIP_EXT}" if zipped else f"*_{base_path.name}"
     matches = sorted(base_path.parent.glob(pattern))
     for old in matches[:-keep]:
         old.unlink()
+
+
+def _zip_sql_file(sql_path: Path) -> Path:
+    """Compress *sql_path* to a sibling .zip and delete the original.
+
+    Returns the path to the resulting .zip file.
+    """
+    zip_path = sql_path.with_suffix(ZIP_EXT)
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(sql_path, arcname=sql_path.name)
+    sql_path.unlink()
+    return zip_path
 
 
 def backup_database(
@@ -83,17 +98,19 @@ def backup_database(
     output_path: Path,
     batch_size: int = DEFAULT_BATCH_SIZE,
     incremental: int | None = None,
+    zip: bool = False,
 ) -> Path:
-    """Dump a database to a .sql file.
+    """Dump a database to a .sql file (optionally compressed as .zip).
 
     Args:
         config: Database connection configuration.
         output_path: Path for the output SQL file.
         batch_size: Number of rows per INSERT batch.
         incremental: If set, prepend a timestamp and keep only N backups.
+        zip: If True, compress the output as a .zip archive (the .sql is removed).
 
     Returns:
-        The actual path the backup was written to.
+        The actual path the backup was written to (.sql or .zip).
     """
     if incremental is not None:
         actual_path = resolve_incremental_path(output_path)
@@ -101,6 +118,10 @@ def backup_database(
         actual_path = output_path
         if actual_path.exists():
             raise BackupError(ERR_BACKUP_PATH_EXISTS.format(path=actual_path))
+        if zip:
+            final_zip = actual_path.with_suffix(ZIP_EXT)
+            if final_zip.exists():
+                raise BackupError(ERR_BACKUP_PATH_EXISTS.format(path=final_zip))
 
     actual_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -120,7 +141,10 @@ def backup_database(
 
         f.write(SQL_FOOTER)
 
+    if zip:
+        actual_path = _zip_sql_file(actual_path)
+
     if incremental is not None:
-        cleanup_old_backups(output_path, keep=incremental)
+        cleanup_old_backups(output_path, keep=incremental, zipped=zip)
 
     return actual_path

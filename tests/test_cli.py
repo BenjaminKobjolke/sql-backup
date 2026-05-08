@@ -26,7 +26,7 @@ class TestCLI:
             main()
 
         mock_load.assert_called_once_with("mydb")
-        mock_backup.assert_called_once_with(config, output, incremental=None)
+        mock_backup.assert_called_once_with(config, output, incremental=None, zip=False)
 
     def test_push_dispatches(self, tmp_path: Path) -> None:
         config = MagicMock()
@@ -160,4 +160,49 @@ class TestCLI:
         ):
             main()
 
-        mock_backup.assert_called_once_with(config, output, incremental=5)
+        mock_backup.assert_called_once_with(config, output, incremental=5, zip=False)
+
+    def test_zip_passes_to_backup(self, tmp_path: Path) -> None:
+        config = MagicMock()
+        output = tmp_path / "dump.sql"
+
+        with (
+            patch("sqlbackup.cli.load_config", return_value=config),
+            patch("sqlbackup.cli.backup_database", return_value=output) as mock_backup,
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--backup",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    str(output),
+                    "--zip",
+                ],
+            ),
+        ):
+            main()
+
+        mock_backup.assert_called_once_with(config, output, incremental=None, zip=True)
+
+    def test_zip_with_push_rejected(self, tmp_path: Path) -> None:
+        sql_file = tmp_path / "dump.sql"
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--push",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    str(sql_file),
+                    "--zip",
+                ],
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
