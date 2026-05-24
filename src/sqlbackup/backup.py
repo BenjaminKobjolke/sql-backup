@@ -12,6 +12,8 @@ from sqlbackup.connection import DatabaseConnection
 from sqlbackup.constants import (
     DEFAULT_BATCH_SIZE,
     ERR_BACKUP_PATH_EXISTS,
+    ERR_INCLUDE_EXCLUDE_MUTUAL,
+    ERR_INCLUDE_MISSING_TABLES,
     SQL_DROP_TABLE,
     SQL_FOOTER,
     SQL_HEADER,
@@ -93,12 +95,34 @@ def _zip_sql_file(sql_path: Path) -> Path:
     return zip_path
 
 
+def _filter_tables(
+    tables: list[str],
+    includes: list[str] | None,
+    excludes: list[str] | None,
+) -> list[str]:
+    """Return *tables* filtered by include/exclude lists.
+
+    Caller must ensure *includes* and *excludes* are not both set.
+    Raises BackupError if an include name is missing from *tables*.
+    """
+    if includes:
+        missing = [t for t in includes if t not in tables]
+        if missing:
+            raise BackupError(ERR_INCLUDE_MISSING_TABLES.format(tables=", ".join(missing)))
+        return [t for t in tables if t in includes]
+    if excludes:
+        return [t for t in tables if t not in excludes]
+    return tables
+
+
 def backup_database(
     config: DbConfig,
     output_path: Path,
     batch_size: int = DEFAULT_BATCH_SIZE,
     incremental: int | None = None,
     zip: bool = False,
+    includes: list[str] | None = None,
+    excludes: list[str] | None = None,
 ) -> Path:
     """Dump a database to a .sql file (optionally compressed as .zip).
 
@@ -108,10 +132,15 @@ def backup_database(
         batch_size: Number of rows per INSERT batch.
         incremental: If set, prepend a timestamp and keep only N backups.
         zip: If True, compress the output as a .zip archive (the .sql is removed).
+        includes: If set, dump only these tables. Mutually exclusive with *excludes*.
+        excludes: If set, dump all tables except these.
 
     Returns:
         The actual path the backup was written to (.sql or .zip).
     """
+    if includes and excludes:
+        raise BackupError(ERR_INCLUDE_EXCLUDE_MUTUAL)
+
     if incremental is not None:
         actual_path = resolve_incremental_path(output_path)
     else:
@@ -125,21 +154,23 @@ def backup_database(
 
     actual_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with DatabaseConnection(config) as db, open(actual_path, "w", encoding="utf-8") as f:
-        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-        f.write(SQL_HEADER.format(database=config.database, date=now))
+    with DatabaseConnection(config) as db:
+        tables = _filter_tables(db.get_tables(), includes, excludes)
 
-        tables = db.get_tables()
-        for table in tables:
-            f.write(SQL_DROP_TABLE.format(table=table))
+        with open(actual_path, "w", encoding="utf-8") as f:
+            now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            f.write(SQL_HEADER.format(database=config.database, date=now))
 
-            ddl = db.get_create_table(table)
-            f.write(ddl)
-            f.write(";\n\n")
+            for table in tables:
+                f.write(SQL_DROP_TABLE.format(table=table))
 
-            _write_table_data(f, db, table, batch_size=batch_size)
+                ddl = db.get_create_table(table)
+                f.write(ddl)
+                f.write(";\n\n")
 
-        f.write(SQL_FOOTER)
+                _write_table_data(f, db, table, batch_size=batch_size)
+
+            f.write(SQL_FOOTER)
 
     if zip:
         actual_path = _zip_sql_file(actual_path)

@@ -11,6 +11,7 @@ from sqlbackup.config import DbConfig
 from sqlbackup.connection import DatabaseConnection
 from sqlbackup.constants import (
     ERR_PUSH_FILE_NOT_FOUND,
+    ERR_PUSH_TARGET_NOT_EMPTY,
     ERR_PUSH_ZIP_MULTIPLE_SQL,
     ERR_PUSH_ZIP_NO_SQL,
     SQL_EXT,
@@ -78,7 +79,7 @@ def _extract_sql_from_zip(zip_path: Path, dest_dir: Path) -> Path:
         return Path(zf.extract(sql_members[0], dest_dir))
 
 
-def push_database(config: DbConfig, sql_path: Path) -> None:
+def push_database(config: DbConfig, sql_path: Path, *, force: bool = False) -> None:
     """Restore a .sql dump file to a database.
 
     If *sql_path* ends in ``.zip``, the archive is extracted to a temp dir and
@@ -87,9 +88,19 @@ def push_database(config: DbConfig, sql_path: Path) -> None:
     Args:
         config: Database connection configuration.
         sql_path: Path to the SQL dump file (or a .zip containing one).
+        force: If False (default), refuse to push to a target DB that already
+            has tables. Set True to overwrite an existing schema.
     """
     if not sql_path.exists():
         raise PushError(ERR_PUSH_FILE_NOT_FOUND.format(path=sql_path))
+
+    if not force:
+        with DatabaseConnection(config) as db:
+            existing = db.get_tables()
+        if existing:
+            raise PushError(
+                ERR_PUSH_TARGET_NOT_EMPTY.format(db=config.database, count=len(existing))
+            )
 
     if sql_path.suffix.lower() == ZIP_EXT:
         with tempfile.TemporaryDirectory() as td:

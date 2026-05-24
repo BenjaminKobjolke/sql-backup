@@ -41,3 +41,14 @@ ERR_NO_ACTION = "Must specify --backup or --push."
 ERR_ZIP_REQUIRES_BACKUP = "--zip can only be used with --backup."
 ERR_PUSH_ZIP_NO_SQL = "No .sql file found inside zip: {path}"
 ERR_PUSH_ZIP_MULTIPLE_SQL = "Multiple .sql files inside zip (ambiguous): {path}"
+ERR_PUSH_TARGET_NOT_EMPTY = (
+    "Target database '{db}' is not empty ({count} tables). Use --force to overwrite."
+)
+ERR_COPY_REQUIRES_SOURCE_TARGET = "--copy requires --source and --target."
+ERR_COPY_REJECTS_CONFIG_PATH = "--copy does not accept --config or --path."
+ERR_INCLUDE_EXCLUDE_MUTUAL = "--include-table and --exclude-table are mutually exclusive."
+ERR_INCLUDE_MISSING_TABLES = "Tables not found in source DB: {tables}"
+ERR_FILTERS_REQUIRE_BACKUP_OR_COPY = (
+    "--include-table and --exclude-table can only be used with --backup or --copy."
+)
+ERR_FORCE_REQUIRES_PUSH_OR_COPY = "--force can only be used with --push or --copy."

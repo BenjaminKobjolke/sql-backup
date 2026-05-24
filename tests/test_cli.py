@@ -26,7 +26,9 @@ class TestCLI:
             main()
 
         mock_load.assert_called_once_with("mydb")
-        mock_backup.assert_called_once_with(config, output, incremental=None, zip=False)
+        mock_backup.assert_called_once_with(
+            config, output, incremental=None, zip=False, includes=None, excludes=None
+        )
 
     def test_push_dispatches(self, tmp_path: Path) -> None:
         config = MagicMock()
@@ -43,7 +45,7 @@ class TestCLI:
             main()
 
         mock_load.assert_called_once_with("mydb")
-        mock_push.assert_called_once_with(config, sql_file)
+        mock_push.assert_called_once_with(config, sql_file, force=False)
 
     def test_no_action_exits(self) -> None:
         with (
@@ -160,7 +162,9 @@ class TestCLI:
         ):
             main()
 
-        mock_backup.assert_called_once_with(config, output, incremental=5, zip=False)
+        mock_backup.assert_called_once_with(
+            config, output, incremental=5, zip=False, includes=None, excludes=None
+        )
 
     def test_zip_passes_to_backup(self, tmp_path: Path) -> None:
         config = MagicMock()
@@ -184,7 +188,9 @@ class TestCLI:
         ):
             main()
 
-        mock_backup.assert_called_once_with(config, output, incremental=None, zip=True)
+        mock_backup.assert_called_once_with(
+            config, output, incremental=None, zip=True, includes=None, excludes=None
+        )
 
     def test_zip_with_push_rejected(self, tmp_path: Path) -> None:
         sql_file = tmp_path / "dump.sql"
@@ -206,3 +212,251 @@ class TestCLI:
             main()
 
         assert exc_info.value.code == 2
+
+    def test_include_tables_passes_to_backup(self, tmp_path: Path) -> None:
+        config = MagicMock()
+        output = tmp_path / "dump.sql"
+
+        with (
+            patch("sqlbackup.cli.load_config", return_value=config),
+            patch("sqlbackup.cli.backup_database", return_value=output) as mock_backup,
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--backup",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    str(output),
+                    "--include-table",
+                    "users",
+                    "--include-table",
+                    "posts",
+                ],
+            ),
+        ):
+            main()
+
+        mock_backup.assert_called_once_with(
+            config,
+            output,
+            incremental=None,
+            zip=False,
+            includes=["users", "posts"],
+            excludes=None,
+        )
+
+    def test_exclude_tables_passes_to_backup(self, tmp_path: Path) -> None:
+        config = MagicMock()
+        output = tmp_path / "dump.sql"
+
+        with (
+            patch("sqlbackup.cli.load_config", return_value=config),
+            patch("sqlbackup.cli.backup_database", return_value=output) as mock_backup,
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--backup",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    str(output),
+                    "--exclude-table",
+                    "logs",
+                ],
+            ),
+        ):
+            main()
+
+        mock_backup.assert_called_once_with(
+            config,
+            output,
+            incremental=None,
+            zip=False,
+            includes=None,
+            excludes=["logs"],
+        )
+
+    def test_include_and_exclude_rejected(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--backup",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    "dump.sql",
+                    "--include-table",
+                    "a",
+                    "--exclude-table",
+                    "b",
+                ],
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+
+    def test_force_passes_to_push(self, tmp_path: Path) -> None:
+        config = MagicMock()
+        sql_file = tmp_path / "dump.sql"
+
+        with (
+            patch("sqlbackup.cli.load_config", return_value=config),
+            patch("sqlbackup.cli.push_database") as mock_push,
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--push",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    str(sql_file),
+                    "--force",
+                ],
+            ),
+        ):
+            main()
+
+        mock_push.assert_called_once_with(config, sql_file, force=True)
+
+    def test_force_with_backup_rejected(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--backup",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    "dump.sql",
+                    "--force",
+                ],
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+
+    def test_filters_with_push_rejected(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--push",
+                    "--config",
+                    "mydb",
+                    "--path",
+                    "dump.sql",
+                    "--include-table",
+                    "users",
+                ],
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+
+
+class TestCopyCLI:
+    def test_copy_dispatches(self) -> None:
+        src = MagicMock()
+        tgt = MagicMock()
+
+        def load(name: str) -> MagicMock:
+            return src if name == "prod" else tgt
+
+        with (
+            patch("sqlbackup.cli.load_config", side_effect=load) as mock_load,
+            patch("sqlbackup.cli.copy_database") as mock_copy,
+            patch(
+                "sys.argv",
+                ["sqlbackup", "--copy", "--source", "prod", "--target", "test"],
+            ),
+        ):
+            main()
+
+        assert mock_load.call_count == 2
+        mock_copy.assert_called_once_with(
+            src, tgt, includes=None, excludes=None, force=False
+        )
+
+    def test_copy_missing_source_exits(self) -> None:
+        with (
+            patch("sys.argv", ["sqlbackup", "--copy", "--target", "test"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+
+    def test_copy_missing_target_exits(self) -> None:
+        with (
+            patch("sys.argv", ["sqlbackup", "--copy", "--source", "prod"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+
+    def test_copy_rejects_config_or_path(self) -> None:
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--copy",
+                    "--source",
+                    "prod",
+                    "--target",
+                    "test",
+                    "--config",
+                    "x",
+                ],
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 2
+
+    def test_copy_passes_filters_and_force(self) -> None:
+        src = MagicMock()
+        tgt = MagicMock()
+
+        def load(name: str) -> MagicMock:
+            return src if name == "prod" else tgt
+
+        with (
+            patch("sqlbackup.cli.load_config", side_effect=load),
+            patch("sqlbackup.cli.copy_database") as mock_copy,
+            patch(
+                "sys.argv",
+                [
+                    "sqlbackup",
+                    "--copy",
+                    "--source",
+                    "prod",
+                    "--target",
+                    "test",
+                    "--exclude-table",
+                    "logs",
+                    "--force",
+                ],
+            ),
+        ):
+            main()
+
+        mock_copy.assert_called_once_with(
+            src, tgt, includes=None, excludes=["logs"], force=True
+        )

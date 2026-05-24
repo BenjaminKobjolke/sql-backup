@@ -40,6 +40,9 @@ def load_config(name: str, *, config_dir: Path | None = None) -> DbConfig:
     if config_dir is None:
         config_dir = CONFIG_BASE_DIR / CONFIG_DIR
 
+    if name.lower().endswith(CONFIG_EXT):
+        name = name[: -len(CONFIG_EXT)]
+
     path = config_dir / f"{name}{CONFIG_EXT}"
 
     if not path.exists():

@@ -52,6 +52,34 @@ sqlbackup --backup --config my_database --path backups/20260213_my_database.sql
 sqlbackup --push --config my_database_local --path backups/20260213_my_database.sql
 ```
 
+By default, `--push` refuses to write to a target database that already contains tables. Pass `--force` to overwrite an existing schema:
+
+```bash
+sqlbackup --push --config my_database_local --path backups/20260213_my_database.sql --force
+```
+
+### Copy a live DB to a test DB
+
+Clone one database to another in a single command. Internally this dumps the source to a temp `.sql` and restores it to the target; the temp file is removed afterwards.
+
+```bash
+sqlbackup --copy --source production --target test
+```
+
+Both `--source` and `--target` are config names (each pointing to a JSON file under `configs/`). The target must be empty unless `--force` is supplied.
+
+Limit the tables that get copied:
+
+```bash
+# Only copy a whitelist
+sqlbackup --copy --source production --target test --include-table users --include-table orders --force
+
+# Copy everything except a blacklist
+sqlbackup --copy --source production --target test --exclude-table audit_log --force
+```
+
+`--include-table` and `--exclude-table` are repeatable and mutually exclusive. They also work with `--backup`.
+
 ### Incremental backup
 
 Use `--incremental N` to automatically prepend a timestamp to the filename and keep only the N most recent backups:
@@ -62,7 +90,7 @@ sqlbackup --backup --config my_database --path backups/my_database.sql --increme
 
 This produces files like `backups/20260213_143022_my_database.sql`. Once there are more than 10 matching backups, the oldest are deleted.
 
-The `--config` value is the filename without `.json`. The `--path` value is the path to the `.sql` file.
+The `--config`, `--source`, and `--target` values are config filenames under `configs/`. The `.json` suffix is optional (`my_database` and `my_database.json` both resolve to the same file). Absolute paths are also accepted. The `--path` value is the path to the `.sql` file.
 
 ## Development
 

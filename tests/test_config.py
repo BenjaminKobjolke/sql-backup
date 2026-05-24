@@ -78,3 +78,21 @@ class TestLoadConfig:
 
         cfg = load_config("extra", config_dir=tmp_config_dir)
         assert cfg.database == "testdb"
+
+    def test_name_with_json_suffix_accepted(
+        self, tmp_config_dir: Path, sample_config: dict[str, object]
+    ) -> None:
+        config_file = tmp_config_dir / "mydb.json"
+        config_file.write_text(json.dumps(sample_config))
+
+        cfg = load_config("mydb.json", config_dir=tmp_config_dir)
+        assert cfg.database == "testdb"
+
+    def test_name_with_uppercase_json_suffix_accepted(
+        self, tmp_config_dir: Path, sample_config: dict[str, object]
+    ) -> None:
+        config_file = tmp_config_dir / "mydb.json"
+        config_file.write_text(json.dumps(sample_config))
+
+        cfg = load_config("mydb.JSON", config_dir=tmp_config_dir)
+        assert cfg.database == "testdb"

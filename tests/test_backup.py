@@ -368,6 +368,72 @@ class TestZipBackup:
         assert (tmp_path / "20260101_120000_db.sql").exists()
 
 
+class TestBackupFilters:
+    @pytest.fixture()
+    def db_config(self) -> DbConfig:
+        return DbConfig(
+            host="localhost", port=3306, user="root", password="secret", database="testdb"
+        )
+
+    @pytest.fixture()
+    def mock_db_conn(self) -> MagicMock:
+        mock = MagicMock()
+        mock.__enter__ = MagicMock(return_value=mock)
+        mock.__exit__ = MagicMock(return_value=False)
+        mock.get_tables.return_value = ["users", "posts", "logs"]
+        mock.get_create_table.side_effect = lambda t: f"CREATE TABLE `{t}` (id INT)"
+        mock.get_column_names.return_value = ["id"]
+        mock.iter_rows.return_value = iter([])
+        return mock
+
+    def test_includes_only_dumps_listed(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        output = tmp_path / "dump.sql"
+        with patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn):
+            backup_database(db_config, output, includes=["users"])
+        content = output.read_text(encoding="utf-8")
+        assert "DROP TABLE IF EXISTS `users`;" in content
+        assert "DROP TABLE IF EXISTS `posts`;" not in content
+        assert "DROP TABLE IF EXISTS `logs`;" not in content
+
+    def test_excludes_skips_listed(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        output = tmp_path / "dump.sql"
+        # iter_rows is called once per included table; supply enough iterators
+        mock_db_conn.iter_rows.side_effect = [iter([]), iter([])]
+        with patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn):
+            backup_database(db_config, output, excludes=["logs"])
+        content = output.read_text(encoding="utf-8")
+        assert "DROP TABLE IF EXISTS `users`;" in content
+        assert "DROP TABLE IF EXISTS `posts`;" in content
+        assert "DROP TABLE IF EXISTS `logs`;" not in content
+
+    def test_include_unknown_table_raises(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        output = tmp_path / "dump.sql"
+        with (
+            pytest.raises(BackupError, match="not found"),
+            patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn),
+        ):
+            backup_database(db_config, output, includes=["nope"])
+        # No partial file should remain.
+        assert not output.exists()
+
+    def test_include_and_exclude_together_raises(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        output = tmp_path / "dump.sql"
+        with (
+            pytest.raises(BackupError, match="mutually exclusive"),
+            patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn),
+        ):
+            backup_database(db_config, output, includes=["users"], excludes=["logs"])
+        assert not output.exists()
+
+
 class TestCleanupOldBackupsZipped:
     def test_keeps_n_most_recent_zip(self, tmp_path: Path) -> None:
         for i in range(5):

@@ -23,6 +23,8 @@ def mock_db_conn() -> MagicMock:
     mock = MagicMock()
     mock.__enter__ = MagicMock(return_value=mock)
     mock.__exit__ = MagicMock(return_value=False)
+    # Default to empty target so the non-empty-guard does not trigger.
+    mock.get_tables.return_value = []
     return mock
 
 
@@ -186,3 +188,47 @@ class TestPushZip:
         missing = tmp_path / "nope.zip"
         with pytest.raises(PushError, match="SQL file not found"):
             push_database(db_config, missing)
+
+
+class TestPushTargetEmptyGuard:
+    def test_refuses_non_empty_target_without_force(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        sql_file = tmp_path / "dump.sql"
+        sql_file.write_text("DROP TABLE IF EXISTS `users`;\n", encoding="utf-8")
+        mock_db_conn.get_tables.return_value = ["users", "posts"]
+
+        with (
+            pytest.raises(PushError, match="not empty"),
+            patch("sqlbackup.push.DatabaseConnection", return_value=mock_db_conn),
+        ):
+            push_database(db_config, sql_file)
+
+        # Must have refused before executing any statements.
+        mock_db_conn.execute_sql.assert_not_called()
+
+    def test_overwrites_non_empty_target_with_force(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        sql_file = tmp_path / "dump.sql"
+        sql_file.write_text("DROP TABLE IF EXISTS `users`;\n", encoding="utf-8")
+        mock_db_conn.get_tables.return_value = ["users", "posts"]
+
+        with patch("sqlbackup.push.DatabaseConnection", return_value=mock_db_conn):
+            push_database(db_config, sql_file, force=True)
+
+        calls = mock_db_conn.execute_sql.call_args_list
+        assert call("DROP TABLE IF EXISTS `users`") in calls
+
+    def test_empty_target_pushes_without_force(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        sql_file = tmp_path / "dump.sql"
+        sql_file.write_text("DROP TABLE IF EXISTS `users`;\n", encoding="utf-8")
+        mock_db_conn.get_tables.return_value = []
+
+        with patch("sqlbackup.push.DatabaseConnection", return_value=mock_db_conn):
+            push_database(db_config, sql_file)
+
+        calls = mock_db_conn.execute_sql.call_args_list
+        assert call("DROP TABLE IF EXISTS `users`") in calls
