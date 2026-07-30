@@ -4,6 +4,8 @@
 - Install: `install.bat` or `uv sync --all-extras`
 - Run: `uv run sqlbackup --backup --config <name> --path <file.sql>`
 - Run: `uv run sqlbackup --push --config <name> --path <file.sql>`
+- Run: `uv run sqlbackup --execute --config <name> --path <file.sql>` (run a SQL file against an existing DB; add `--dry-run` to preview without connecting)
+- Run: `uv run sqlbackup --execute --config <name> --path <folder> --backup-path <file.sql> --incremental 30 --zip` (pick a revision from a folder, newest preselected / `--yes` for newest without prompting; back up first)
 - Test all: `uv run pytest tests/ -v`
 - Test single: `uv run pytest tests/test_config.py -v`
 - Lint: `uv run ruff check src/ tests/`
@@ -35,3 +37,4 @@ Fix any reported issues before committing.
 - `tests/` — pytest test suite
 - `configs/` — JSON credential files (gitignored, copy from `configs_example/`)
 - `configs_example/` — example config template (committed)
+- `docs/` — one markdown file per CLI command (`BACKUP.md`, `PUSH.md`, `EXECUTE.md`, `COPY.md`); README.md links to these instead of duplicating usage docs
