@@ -23,9 +23,7 @@ def target_cfg() -> DbConfig:
 
 
 class TestCopyDatabase:
-    def test_calls_backup_then_push(
-        self, source_cfg: DbConfig, target_cfg: DbConfig
-    ) -> None:
+    def test_calls_backup_then_push(self, source_cfg: DbConfig, target_cfg: DbConfig) -> None:
         observed: dict[str, object] = {}
 
         def fake_backup(cfg: DbConfig, path: Path, **kwargs: object) -> Path:
@@ -55,9 +53,7 @@ class TestCopyDatabase:
         # Temp file cleaned up after push.
         assert not Path(str(observed["backup_path"])).exists()
 
-    def test_passes_filters_and_force(
-        self, source_cfg: DbConfig, target_cfg: DbConfig
-    ) -> None:
+    def test_passes_filters_and_force(self, source_cfg: DbConfig, target_cfg: DbConfig) -> None:
         captured: dict[str, object] = {}
 
         def fake_backup(cfg: DbConfig, path: Path, **kwargs: object) -> Path:

@@ -387,9 +387,7 @@ class TestCopyCLI:
             main()
 
         assert mock_load.call_count == 2
-        mock_copy.assert_called_once_with(
-            src, tgt, includes=None, excludes=None, force=False
-        )
+        mock_copy.assert_called_once_with(src, tgt, includes=None, excludes=None, force=False)
 
     def test_copy_missing_source_exits(self) -> None:
         with (
@@ -457,6 +455,4 @@ class TestCopyCLI:
         ):
             main()
 
-        mock_copy.assert_called_once_with(
-            src, tgt, includes=None, excludes=["logs"], force=True
-        )
+        mock_copy.assert_called_once_with(src, tgt, includes=None, excludes=["logs"], force=True)

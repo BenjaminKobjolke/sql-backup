@@ -121,9 +121,9 @@ class TestPushDatabase:
         sql_file.write_text(
             "INSERT INTO `wp_options` (`option_name`, `option_value`) VALUES\n"
             "('wptouch_settings', 's:10:\"site_title\";\n"
-            "s:29:\"XIDA Design & Tech\";\n"
-            "s:5:\"color\";\n"
-            "s:7:\"#ffffff\";');\n",
+            's:29:"XIDA Design & Tech";\n'
+            's:5:"color";\n'
+            's:7:"#ffffff";\');\n',
             encoding="utf-8",
         )
 
@@ -135,8 +135,8 @@ class TestPushDatabase:
         assert len(calls) == 4
         stmt = calls[3][0][0]
         assert "INSERT INTO `wp_options`" in stmt
-        assert "s:10:\"site_title\";" in stmt
-        assert "s:7:\"#ffffff\";" in stmt
+        assert 's:10:"site_title";' in stmt
+        assert 's:7:"#ffffff";' in stmt
 
 
 class TestPushZip:
@@ -182,9 +182,7 @@ class TestPushZip:
         ):
             push_database(db_config, zip_path)
 
-    def test_missing_zip_raises_file_not_found(
-        self, db_config: DbConfig, tmp_path: Path
-    ) -> None:
+    def test_missing_zip_raises_file_not_found(self, db_config: DbConfig, tmp_path: Path) -> None:
         missing = tmp_path / "nope.zip"
         with pytest.raises(PushError, match="SQL file not found"):
             push_database(db_config, missing)
