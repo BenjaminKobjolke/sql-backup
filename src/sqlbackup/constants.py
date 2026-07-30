@@ -38,7 +38,7 @@ ERR_PUSH_FILE_NOT_FOUND = "SQL file not found: {path}"
 ERR_CONNECTION_FAILED = "Failed to connect to database: {error}"
 ERR_MUTUALLY_EXCLUSIVE = "Must specify either --backup or --push, not both."
 ERR_NO_ACTION = "Must specify --backup or --push."
-ERR_ZIP_REQUIRES_BACKUP = "--zip can only be used with --backup."
+ERR_ZIP_REQUIRES_BACKUP = "--zip can only be used with --backup, or with --execute --backup-path."
 ERR_PUSH_ZIP_NO_SQL = "No .sql file found inside zip: {path}"
 ERR_PUSH_ZIP_MULTIPLE_SQL = "Multiple .sql files inside zip (ambiguous): {path}"
 ERR_PUSH_TARGET_NOT_EMPTY = (
@@ -52,3 +52,20 @@ ERR_FILTERS_REQUIRE_BACKUP_OR_COPY = (
     "--include-table and --exclude-table can only be used with --backup or --copy."
 )
 ERR_FORCE_REQUIRES_PUSH_OR_COPY = "--force can only be used with --push or --copy."
+ERR_EXECUTE_FILE_NOT_FOUND = "SQL file not found: {path}"
+ERR_EXECUTE_EMPTY = "No executable SQL statements found in: {path}"
+ERR_EXECUTE_DELIMITER_UNSUPPORTED = (
+    "Custom DELIMITER blocks (stored procedures/triggers) are not supported: {path}"
+)
+ERR_EXECUTE_UNTERMINATED = (
+    "File ends mid-statement (unterminated ';' or string literal); last statement would be "
+    "skipped: {path}"
+)
+ERR_DRY_RUN_REQUIRES_EXECUTE = "--dry-run can only be used with --execute."
+ERR_EXECUTE_PATH_NOT_FOUND = "Path not found: {path}"
+ERR_EXECUTE_NO_SQL_IN_FOLDER = "No .sql files found in folder: {path}"
+ERR_BACKUP_PATH_REQUIRES_EXECUTE = "--backup-path can only be used with --execute."
+ERR_YES_REQUIRES_EXECUTE = "--yes can only be used with --execute."
+ERR_INCREMENTAL_REQUIRES_BACKUP_PATH = (
+    "--incremental with --execute requires --backup-path (nothing to keep otherwise)."
+)

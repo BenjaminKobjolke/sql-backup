@@ -19,3 +19,7 @@ class BackupError(SqlBackupError):
 
 class PushError(SqlBackupError):
     """Push/restore operation errors."""
+
+
+class ExecuteError(SqlBackupError):
+    """Execute-SQL-file operation errors."""

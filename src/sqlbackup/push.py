@@ -20,13 +20,18 @@ from sqlbackup.constants import (
 from sqlbackup.exceptions import PushError
 
 
-def _parse_statements(sql_path: Path) -> list[str]:
+def _parse_statements(sql_path: Path) -> tuple[list[str], str]:
     """Parse a SQL file into individual statements.
 
     Handles multi-line statements terminated by semicolons.
     Skips comments and blank lines.
     Tracks single-quote state so semicolons inside string literals
     (e.g. serialized PHP data) are not treated as statement boundaries.
+
+    Returns ``(statements, leftover)`` where *leftover* is any trailing
+    content that was never terminated by a semicolon (e.g. the file ends
+    mid-statement or mid string literal). Callers that don't care can
+    discard it; validation code can use it to detect a truncated file.
     """
     statements: list[str] = []
     current: list[str] = []
@@ -62,7 +67,8 @@ def _parse_statements(sql_path: Path) -> list[str]:
                 statements.append(stmt)
                 current = []
 
-    return statements
+    leftover = "\n".join(current)
+    return statements, leftover
 
 
 def _extract_sql_from_zip(zip_path: Path, dest_dir: Path) -> Path:
@@ -105,9 +111,9 @@ def push_database(config: DbConfig, sql_path: Path, *, force: bool = False) -> N
     if sql_path.suffix.lower() == ZIP_EXT:
         with tempfile.TemporaryDirectory() as td:
             extracted = _extract_sql_from_zip(sql_path, Path(td))
-            statements = _parse_statements(extracted)
+            statements, _leftover = _parse_statements(extracted)
     else:
-        statements = _parse_statements(sql_path)
+        statements, _leftover = _parse_statements(sql_path)
 
     # Increase server max_allowed_packet (requires SUPER/SYSTEM_VARIABLES_ADMIN).
     # New connections pick up the global value, so we do this before the main connection.
