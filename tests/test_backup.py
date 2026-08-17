@@ -311,6 +311,14 @@ class TestZipBackup:
         assert actual.exists()
         assert not sql_path.exists()
 
+    def test_no_leftover_temp_files(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        sql_path = tmp_path / "db.sql"
+        with patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn):
+            backup_database(db_config, sql_path, zip=True)
+        assert list(tmp_path.glob(".sqlbak-*")) == []
+
     def test_zip_contains_sql_member(
         self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
     ) -> None:

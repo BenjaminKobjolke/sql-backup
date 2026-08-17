@@ -4,6 +4,7 @@ CONFIG_DIR = "configs"
 CONFIG_EXT = ".json"
 ZIP_EXT = ".zip"
 SQL_EXT = ".sql"
+TMP_PREFIX = ".sqlbak-"
 
 REQUIRED_CONFIG_KEYS = frozenset({"host", "port", "user", "password", "database"})
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,9 +17,11 @@ from sqlbackup.constants import (
     ERR_INCLUDE_EXCLUDE_MUTUAL,
     ERR_INCLUDE_MISSING_TABLES,
     SQL_DROP_TABLE,
+    SQL_EXT,
     SQL_FOOTER,
     SQL_HEADER,
     TIMESTAMP_FORMAT,
+    TMP_PREFIX,
     ZIP_EXT,
 )
 from sqlbackup.exceptions import BackupError
@@ -83,14 +87,17 @@ def cleanup_old_backups(base_path: Path, keep: int, zipped: bool = False) -> Non
         old.unlink()
 
 
-def _zip_sql_file(sql_path: Path) -> Path:
+def _zip_sql_file(sql_path: Path, arcname: str | None = None) -> Path:
     """Compress *sql_path* to a sibling .zip and delete the original.
+
+    The archive member is named *arcname* (defaults to ``sql_path.name``), so a
+    temp file can still be zipped under its eventual real filename.
 
     Returns the path to the resulting .zip file.
     """
     zip_path = sql_path.with_suffix(ZIP_EXT)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(sql_path, arcname=sql_path.name)
+        zf.write(sql_path, arcname=arcname or sql_path.name)
     sql_path.unlink()
     return zip_path
 
@@ -154,10 +161,18 @@ def backup_database(
 
     actual_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with DatabaseConnection(config) as db:
-        tables = _filter_tables(db.get_tables(), includes, excludes)
+    # Write to a temp file in the destination directory first, then atomically
+    # rename to the final name. This keeps a synced destination folder (e.g.
+    # Syncthing) from ever seeing a partially-written file under the final name,
+    # and avoids the sync client locking the file while we zip/unlink it.
+    final_path = actual_path.with_suffix(ZIP_EXT) if zip else actual_path
+    fd, tmp_name = tempfile.mkstemp(prefix=TMP_PREFIX, suffix=SQL_EXT, dir=actual_path.parent)
+    tmp_sql = Path(tmp_name)
+    built_path = tmp_sql
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f, DatabaseConnection(config) as db:
+            tables = _filter_tables(db.get_tables(), includes, excludes)
 
-        with open(actual_path, "w", encoding="utf-8") as f:
             now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
             f.write(SQL_HEADER.format(database=config.database, date=now))
 
@@ -172,10 +187,16 @@ def backup_database(
 
             f.write(SQL_FOOTER)
 
-    if zip:
-        actual_path = _zip_sql_file(actual_path)
+        if zip:
+            built_path = _zip_sql_file(tmp_sql, arcname=actual_path.name)
+
+        os.replace(built_path, final_path)
+    except BaseException:
+        built_path.unlink(missing_ok=True)
+        tmp_sql.unlink(missing_ok=True)
+        raise
 
     if incremental is not None:
         cleanup_old_backups(output_path, keep=incremental, zipped=zip)
 
-    return actual_path
+    return final_path

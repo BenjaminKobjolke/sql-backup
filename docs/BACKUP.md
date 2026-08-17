@@ -44,5 +44,12 @@ sqlbackup --backup --config my_database --path backups/my_database.sql --exclude
 
 An unknown `--include-table` name raises an error.
 
+## Writing to a synced folder
+
+The dump is built under a temp name (`.sqlbak-*.sql`) in the destination folder and
+atomically moved into place once complete, so the final `.sql`/`.zip` never appears
+partially written. If the destination is synced (e.g. Syncthing), you can ignore
+`.sqlbak-*` in your sync client's settings to skip syncing the transient temp files.
+
 See also: [`--execute --backup-path`](EXECUTE.md#safety-backup-before-executing), which reuses
 `--incremental`/`--zip` to take a safety backup before running a SQL file.
