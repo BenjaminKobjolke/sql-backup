@@ -23,4 +23,7 @@ tools/analyze_code_config.bat
 code_analysis_results/
 code_analysis_results
 claude-plans
+/PLAN_*.md
+PLAN.md
+HANDOFF.md
 appcentrics.sql
