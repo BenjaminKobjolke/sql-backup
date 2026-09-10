@@ -100,13 +100,28 @@ def push_database(config: DbConfig, sql_path: Path, *, force: bool = False) -> N
     if not sql_path.exists():
         raise PushError(ERR_PUSH_FILE_NOT_FOUND.format(path=sql_path))
 
+    with DatabaseConnection(config) as db:
+        existing = db.get_tables()
+
     if not force:
-        with DatabaseConnection(config) as db:
-            existing = db.get_tables()
         if existing:
             raise PushError(
                 ERR_PUSH_TARGET_NOT_EMPTY.format(db=config.database, count=len(existing))
             )
+    elif existing:
+        # Empty the target before replaying. The dump interleaves DROP/CREATE per table in
+        # alphabetical order, so a table restored early can carry a foreign key to a stale
+        # table whose own DROP has not run yet - and if that stale table's column differs
+        # (an older latin1 schema, say), MySQL rejects the constraint with
+        # (1215, 'Cannot add foreign key constraint'). Dropping everything up front makes
+        # the replay order irrelevant. FK checks go off so mutually-referencing tables drop.
+        with DatabaseConnection(config) as db:
+            db.execute_sql("SET SESSION FOREIGN_KEY_CHECKS = 0")
+            try:
+                for table in existing:
+                    db.execute_sql(f"DROP TABLE IF EXISTS `{table}`")
+            finally:
+                db.execute_sql("SET SESSION FOREIGN_KEY_CHECKS = 1")
 
     if sql_path.suffix.lower() == ZIP_EXT:
         with tempfile.TemporaryDirectory() as td:
