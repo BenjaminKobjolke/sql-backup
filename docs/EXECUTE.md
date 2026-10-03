@@ -16,6 +16,9 @@ connection is opened.
 If any statement fails, execution stops immediately — statements before it have already been
 committed (no transaction wrapper, since MySQL DDL auto-commits anyway).
 
+Progress is printed per 10% of statements run (`Execute... 10%`, ...). With `--backup-path`, the
+safety backup prints its own [progress lines](BACKUP.md#progress-output) first.
+
 ## `--dry-run`
 
 Validate and preview the parsed statements without connecting to the database at all:
@@ -58,6 +61,19 @@ sqlbackup --execute --config my_database --path dbrevisions \
 or a directory (the dump is auto-named `<database>.sql` inside it). The chosen revision file is
 validated *before* the backup is taken, so a bad file fails fast without an unnecessary backup.
 `--dry-run` skips the backup step too (no DB connection at all).
+
+Output of a run with a safety backup (backup progress first, then the revision file):
+
+```
+Backup... 10%
+...
+Backup... 100%
+Zipping backup...
+Execute... 50%
+Execute... 100%
+Backup complete: backups/20260730_143022_my_database.zip
+Executed 2 statement(s): dbrevisions/20260730_translations_emojipicker.sql
+```
 
 `--incremental`/`--zip` with `--execute` require `--backup-path` — there's nothing to timestamp
 or compress otherwise.

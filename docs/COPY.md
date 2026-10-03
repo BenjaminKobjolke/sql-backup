@@ -16,6 +16,20 @@ The target must be empty unless `--force` is supplied:
 sqlbackup --copy --source production --target test --force
 ```
 
+## Progress output
+
+The dump phase prints the same [progress lines](BACKUP.md#progress-output) as `--backup`
+(`Backup... 10%`, ...). The restore phase prints no progress:
+
+```
+Dumping source DB 'production'...
+Backup... 10%
+...
+Backup... 100%
+Restoring to target DB 'test'...
+Copy complete: 'production' -> 'test'
+```
+
 ## Limit tables
 
 `--include-table` (whitelist) and `--exclude-table` (blacklist) are repeatable and mutually

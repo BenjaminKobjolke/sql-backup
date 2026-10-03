@@ -9,6 +9,13 @@ sqlbackup --backup --config my_database --path backups/20260213_my_database.sql
 Fails if the output file already exists (use a different `--path`, or use `--incremental`
 to timestamp it automatically).
 
+## Progress output
+
+While dumping, a line is printed per 10% step (`Backup... 10%`, `Backup... 20%`, ...), followed by
+`Zipping backup...` with `--zip`. The percentage is based on the row estimates in
+`information_schema`, so steps are approximate; `100%` is only printed once the dump is complete.
+An empty database prints no progress lines.
+
 ## Incremental backup
 
 Use `--incremental N` to automatically prepend a timestamp to the filename and keep only the
