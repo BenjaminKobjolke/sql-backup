@@ -6,7 +6,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from sqlbackup.backup import backup_database, resolve_incremental_path
+from sqlbackup.backup import Progress, backup_database, resolve_incremental_path
 from sqlbackup.config import DbConfig
 from sqlbackup.connection import DatabaseConnection
 from sqlbackup.constants import (
@@ -16,6 +16,7 @@ from sqlbackup.constants import (
     ERR_EXECUTE_NO_SQL_IN_FOLDER,
     ERR_EXECUTE_PATH_NOT_FOUND,
     ERR_EXECUTE_UNTERMINATED,
+    PROGRESS_EXECUTE,
     SQL_EXT,
     ZIP_EXT,
 )
@@ -82,8 +83,11 @@ def execute_sql_file(config: DbConfig, sql_path: Path, *, dry_run: bool = False)
     with DatabaseConnection(config) as db:
         db.execute_sql("SET SESSION net_read_timeout = 600")
         db.execute_sql("SET SESSION net_write_timeout = 600")
+        progress = Progress(PROGRESS_EXECUTE, len(statements))
         for stmt in statements:
             db.execute_sql(stmt)
+            progress.advance()
+        progress.finish()
 
     return len(statements)
 

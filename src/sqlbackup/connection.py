@@ -64,6 +64,17 @@ class DatabaseConnection:
             cursor.execute(f"SELECT * FROM `{table}` LIMIT 0")
             return [desc[0] for desc in cursor.description]
 
+    def get_row_estimates(self) -> dict[str, int]:
+        """Return approximate row counts per table, for progress reporting."""
+        # ponytail: information_schema TABLE_ROWS is only an estimate for InnoDB;
+        # switch to COUNT(*) per table if exact progress matters (scans big tables).
+        with self.conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES "
+                "WHERE TABLE_SCHEMA = DATABASE()"
+            )
+            return {row[0]: int(row[1] or 0) for row in cursor.fetchall()}
+
     def iter_rows(self, table: str, batch_size: int = 1000) -> Any:
         """Yield batches of rows from a table using server-side cursor."""
         with self.conn.cursor(pymysql.cursors.SSCursor) as cursor:

@@ -92,6 +92,18 @@ class TestDatabaseConnection:
         assert cols == ["id", "name", "email"]
         mock_cursor.execute.assert_called_once_with("SELECT * FROM `users` LIMIT 0")
 
+    def test_get_row_estimates(self, db_config: DbConfig, mock_pymysql: MagicMock) -> None:
+        mock_conn = mock_pymysql.connect.return_value
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchall.return_value = [("users", 120), ("a_view", None)]
+
+        with DatabaseConnection(db_config) as db:
+            estimates = db.get_row_estimates()
+
+        assert estimates == {"users": 120, "a_view": 0}
+
     def test_iter_rows(self, db_config: DbConfig, mock_pymysql: MagicMock) -> None:
         mock_conn = mock_pymysql.connect.return_value
         mock_ss_cursor = MagicMock()

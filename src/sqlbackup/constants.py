@@ -31,6 +31,12 @@ SET sql_mode = @OLD_SQL_MODE;
 SQL_DROP_TABLE = "DROP TABLE IF EXISTS `{table}`;\n"
 SQL_DELIMITER = ";\n\n"
 
+PROGRESS_STEP = 10
+PROGRESS_LINE = "{label}... {percent}%"
+PROGRESS_BACKUP = "Backup"
+PROGRESS_EXECUTE = "Execute"
+MSG_ZIPPING = "Zipping backup..."
+
 ERR_CONFIG_NOT_FOUND = "Config file not found: {path}"
 ERR_CONFIG_INVALID_JSON = "Invalid JSON in config file: {path}"
 ERR_CONFIG_MISSING_KEYS = "Missing required keys in config: {keys}"

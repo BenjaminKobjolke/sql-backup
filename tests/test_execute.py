@@ -104,6 +104,22 @@ class TestValidateSqlFile:
 
 
 class TestExecuteSqlFile:
+    def test_prints_progress(
+        self,
+        db_config: DbConfig,
+        mock_db_conn: MagicMock,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        sql_file = tmp_path / "revision.sql"
+        sql_file.write_text("UPDATE `t` SET `x` = 1;\n" * 10, encoding="utf-8")
+
+        with patch("sqlbackup.execute.DatabaseConnection", return_value=mock_db_conn):
+            execute_sql_file(db_config, sql_file)
+
+        lines = capsys.readouterr().out.splitlines()
+        assert lines == [f"Execute... {pct}%" for pct in range(10, 101, 10)]
+
     def test_executes_each_statement(
         self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
     ) -> None:

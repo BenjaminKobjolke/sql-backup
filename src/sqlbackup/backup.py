@@ -16,6 +16,10 @@ from sqlbackup.constants import (
     ERR_BACKUP_PATH_EXISTS,
     ERR_INCLUDE_EXCLUDE_MUTUAL,
     ERR_INCLUDE_MISSING_TABLES,
+    MSG_ZIPPING,
+    PROGRESS_BACKUP,
+    PROGRESS_LINE,
+    PROGRESS_STEP,
     SQL_DROP_TABLE,
     SQL_EXT,
     SQL_FOOTER,
@@ -43,10 +47,40 @@ def _format_value(value: Any) -> str:
     return f"'{s}'"
 
 
+class Progress:
+    """Print ``<label>... N%`` lines as work advances, one per PROGRESS_STEP."""
+
+    def __init__(self, label: str, total: int) -> None:
+        self._label = label
+        self._total = total
+        self._done = 0
+        self._last = 0
+
+    def _print(self, percent: int) -> None:
+        # flush: stdout is a pipe when run from a batch file / watcher.
+        print(PROGRESS_LINE.format(label=self._label, percent=percent), flush=True)
+
+    def advance(self, n: int = 1) -> None:
+        if self._total <= 0:
+            return
+        self._done += n
+        # Capped below 100: the total may be an estimate, only finish() reports completion.
+        percent = min(self._done * 100 // self._total, 100 - PROGRESS_STEP)
+        step = percent // PROGRESS_STEP * PROGRESS_STEP
+        if step > self._last:
+            self._last = step
+            self._print(step)
+
+    def finish(self) -> None:
+        if self._total > 0:
+            self._print(100)
+
+
 def _write_table_data(
     f: IO[str],
     db: DatabaseConnection,
     table: str,
+    progress: Progress,
     batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> None:
     """Write INSERT statements for a table's data."""
@@ -64,6 +98,7 @@ def _write_table_data(
             row_strings.append(f"({values})")
         f.write(",\n".join(row_strings))
         f.write(";\n\n")
+        progress.advance(len(batch))
 
 
 def resolve_incremental_path(base_path: Path) -> Path:
@@ -172,6 +207,8 @@ def backup_database(
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f, DatabaseConnection(config) as db:
             tables = _filter_tables(db.get_tables(), includes, excludes)
+            estimates = db.get_row_estimates()
+            progress = Progress(PROGRESS_BACKUP, sum(estimates.get(t, 0) for t in tables))
 
             now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
             f.write(SQL_HEADER.format(database=config.database, date=now))
@@ -183,11 +220,13 @@ def backup_database(
                 f.write(ddl)
                 f.write(";\n\n")
 
-                _write_table_data(f, db, table, batch_size=batch_size)
+                _write_table_data(f, db, table, progress, batch_size=batch_size)
 
             f.write(SQL_FOOTER)
+            progress.finish()
 
         if zip:
+            print(MSG_ZIPPING, flush=True)
             built_path = _zip_sql_file(tmp_sql, arcname=actual_path.name)
 
         os.replace(built_path, final_path)

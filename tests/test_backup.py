@@ -24,6 +24,7 @@ def mock_db_conn() -> MagicMock:
     mock = MagicMock()
     mock.__enter__ = MagicMock(return_value=mock)
     mock.__exit__ = MagicMock(return_value=False)
+    mock.get_row_estimates.return_value = {}
     return mock
 
 
@@ -252,6 +253,7 @@ class TestIncrementalBackup:
         mock = MagicMock()
         mock.__enter__ = MagicMock(return_value=mock)
         mock.__exit__ = MagicMock(return_value=False)
+        mock.get_row_estimates.return_value = {}
         mock.get_tables.return_value = []
         return mock
 
@@ -298,6 +300,7 @@ class TestZipBackup:
         mock = MagicMock()
         mock.__enter__ = MagicMock(return_value=mock)
         mock.__exit__ = MagicMock(return_value=False)
+        mock.get_row_estimates.return_value = {}
         mock.get_tables.return_value = []
         return mock
 
@@ -388,6 +391,7 @@ class TestBackupFilters:
         mock = MagicMock()
         mock.__enter__ = MagicMock(return_value=mock)
         mock.__exit__ = MagicMock(return_value=False)
+        mock.get_row_estimates.return_value = {}
         mock.get_tables.return_value = ["users", "posts", "logs"]
         mock.get_create_table.side_effect = lambda t: f"CREATE TABLE `{t}` (id INT)"
         mock.get_column_names.return_value = ["id"]
