@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import tempfile
 import zipfile
@@ -122,15 +123,14 @@ def cleanup_old_backups(base_path: Path, keep: int, zipped: bool = False) -> Non
         old.unlink()
 
 
-def _zip_sql_file(sql_path: Path, arcname: str | None = None) -> Path:
-    """Compress *sql_path* to a sibling .zip and delete the original.
+def _zip_sql_file(sql_path: Path, zip_path: Path, arcname: str | None = None) -> Path:
+    """Compress *sql_path* to *zip_path* and delete the original.
 
     The archive member is named *arcname* (defaults to ``sql_path.name``), so a
     temp file can still be zipped under its eventual real filename.
 
-    Returns the path to the resulting .zip file.
+    Returns *zip_path*.
     """
-    zip_path = sql_path.with_suffix(ZIP_EXT)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(sql_path, arcname=arcname or sql_path.name)
     sql_path.unlink()
@@ -196,13 +196,16 @@ def backup_database(
 
     actual_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write to a temp file in the destination directory first, then atomically
+    # Build under a temp name in the destination directory, then atomically
     # rename to the final name. This keeps a synced destination folder (e.g.
-    # Syncthing) from ever seeing a partially-written file under the final name,
-    # and avoids the sync client locking the file while we zip/unlink it.
+    # Syncthing) from ever seeing a partially-written file under the final name.
+    # When zipping, the .sql is staged in the system temp folder instead: a sync
+    # client that picks it up in the destination locks it and the unlink fails.
     final_path = actual_path.with_suffix(ZIP_EXT) if zip else actual_path
-    fd, tmp_name = tempfile.mkstemp(prefix=TMP_PREFIX, suffix=SQL_EXT, dir=actual_path.parent)
+    tmp_dir = None if zip else actual_path.parent
+    fd, tmp_name = tempfile.mkstemp(prefix=TMP_PREFIX, suffix=SQL_EXT, dir=tmp_dir)
     tmp_sql = Path(tmp_name)
+    tmp_zip = actual_path.parent / (tmp_sql.stem + ZIP_EXT)
     built_path = tmp_sql
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f, DatabaseConnection(config) as db:
@@ -227,12 +230,14 @@ def backup_database(
 
         if zip:
             print(MSG_ZIPPING, flush=True)
-            built_path = _zip_sql_file(tmp_sql, arcname=actual_path.name)
+            built_path = _zip_sql_file(tmp_sql, tmp_zip, arcname=actual_path.name)
 
         os.replace(built_path, final_path)
     except BaseException:
-        built_path.unlink(missing_ok=True)
-        tmp_sql.unlink(missing_ok=True)
+        # suppress: a failed cleanup must not mask the error that got us here.
+        for leftover in (tmp_sql, tmp_zip):
+            with contextlib.suppress(OSError):
+                leftover.unlink(missing_ok=True)
         raise
 
     if incremental is not None:

@@ -58,5 +58,9 @@ atomically moved into place once complete, so the final `.sql`/`.zip` never appe
 partially written. If the destination is synced (e.g. Syncthing), you can ignore
 `.sqlbak-*` in your sync client's settings to skip syncing the transient temp files.
 
+With `--zip`, the uncompressed dump is staged in the system temp folder instead (it
+needs the free space there) and only the `.sqlbak-*.zip` is built in the destination,
+so a sync client cannot lock the `.sql` while it is being zipped and removed.
+
 See also: [`--execute --backup-path`](EXECUTE.md#safety-backup-before-executing), which reuses
 `--incremental`/`--zip` to take a safety backup before running a SQL file.

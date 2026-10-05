@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tempfile
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -321,6 +322,19 @@ class TestZipBackup:
         with patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn):
             backup_database(db_config, sql_path, zip=True)
         assert list(tmp_path.glob(".sqlbak-*")) == []
+
+    def test_temp_sql_is_staged_outside_destination(
+        self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
+    ) -> None:
+        # A sync client watching the destination must never see (and lock) the temp .sql.
+        sql_path = tmp_path / "db.sql"
+        with (
+            patch("sqlbackup.backup.DatabaseConnection", return_value=mock_db_conn),
+            patch("sqlbackup.backup.tempfile.mkstemp", wraps=tempfile.mkstemp) as spy,
+        ):
+            backup_database(db_config, sql_path, zip=True)
+        assert spy.call_args.kwargs["dir"] is None
+        assert [p.name for p in tmp_path.iterdir()] == ["db.zip"]
 
     def test_zip_contains_sql_member(
         self, db_config: DbConfig, mock_db_conn: MagicMock, tmp_path: Path
